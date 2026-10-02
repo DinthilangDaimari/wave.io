@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Song Wave</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#070b16;--panel:#0e1426;--line:#1f2a48;--text:#dce6ff;--muted:#7c8bb5;--a:#34e0ff}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:14px;display:grid;gap:12px}
+h1{font-size:21px;margin:4px 0 0}
+p{margin:0;color:var(--muted)}
+canvas{display:block;width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);border-radius:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,label.btn{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer;min-height:44px}
+button:hover,label.btn:hover{border-color:var(--a)}
+button:focus-visible,label.btn:focus-within,input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+button[aria-pressed="true"]{border-color:var(--a);color:var(--a)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.rec[aria-pressed="true"]{border-color:#ff4f6a;color:#ff4f6a}
+.ctl{display:flex;align-items:center;gap:8px;color:var(--muted)}
+input[type=color]{width:44px;height:36px;border:1px solid var(--line);background:none;border-radius:6px;padding:2px}
+input[type=range]{accent-color:var(--a)}
+audio{width:100%}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#msg{min-height:1.4em}
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Song Wave</h1>
+    <p>Add a photo and a song, watch the wave, then download the song or a video.</p>
+  </div>
+
+  <canvas id="c" width="1280" height="720" aria-label="Song visualization"></canvas>
+
+  <div class="row">
+    <label class="btn">Add photo<input class="sr" id="photo" type="file" accept="image/*"></label>
+    <label class="btn">Add song<input class="sr" id="song" type="file" accept="audio/*"></label>
+  </div>
+
+  <audio id="player" controls></audio>
+
+  <div class="row" id="modes" role="group" aria-label="Style">
+    <button data-m="bars" aria-pressed="true">Bars</button>
+    <button data-m="wave" aria-pressed="false">Wave</button>
+    <button data-m="ring" aria-pressed="false">Ring</button>
+    <label class="ctl">Color <input type="color" id="col" value="#34e0ff"></label>
+    <label class="ctl">Dim photo <input type="range" id="dim" min="0" max="0.8" step="0.05" value="0.35"></label>
+  </div>
+
+  <div class="row">
+    <button id="dlSong" disabled>Download song</button>
+    <button id="rec" class="rec" aria-pressed="false" disabled>Record video</button>
+    <a id="dlVid" class="btn" hidden></a>
+  </div>
+  <p id="msg" role="status"></p>
+</main>
+
+<script>
+(function(){
+  var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+  var player=document.getElementById('player'),msg=document.getElementById('msg');
+  var dlSong=document.getElementById('dlSong'),recBtn=document.getElementById('rec'),dlVid=document.getElementById('dlVid');
+  var AC,an,msrc,recDest,tdata,fdata,img=null,songFile=null,songUrl=null,title='',mode='bars',color='#34e0ff',dim=0.35;
+  var recorder=null,chunks=[],vidUrl=null,bass=0;
+
+  function say(t){msg.textContent=t}
+
+  function initAudio(){
+    if(AC)return;
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    an=AC.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0.8;
+    msrc=AC.createMediaElementSource(player);
+    recDest=AC.createMediaStreamDestination();
+    msrc.connect(an);an.connect(AC.destination);an.connect(recDest);
+    tdata=new Uint8Array(an.fftSize);fdata=new Uint8Array(an.frequencyBinCount);
+  }
+  player.addEventListener('play',function(){initAudio();if(AC.state==='suspended')AC.resume()});
+
+  document.getElementById('photo').onchange=function(e){
+    var f=e.target.files[0];if(!f)return;
+    var im=new Image();
+    im.onload=function(){img=im;say('Photo added.')};
+    im.src=URL.createObjectURL(f);
+  };
+
+  document.getElementById('song').onchange=function(e){
+    var f=e.target.files[0];if(!f)return;
+    if(songUrl)URL.revokeObjectURL(songUrl);
+    songFile=f;songUrl=URL.createObjectURL(f);
+    title=f.name.replace(/\.[^.]+$/,'');
+    player.src=songUrl;
+    dlSong.disabled=false;recBtn.disabled=false;
+    say('Song added. Press play, or record a video.');
+  };
+
+  dlSong.onclick=function(){
+    if(!songFile)return;
+    var a=document.createElement('a');a.href=songUrl;a.download=songFile.name;
+    document.body.appendChild(a);a.click();a.remove();
+  };
+
+  document.getElementById('modes').onclick=function(e){
+    var b=e.target.closest('button');if(!b)return;mode=b.dataset.m;
+    [].forEach.call(this.querySelectorAll('button'),function(x){x.setAttribute('aria-pressed',x===b)});
+  };
+  document.getElementById('col').oninput=function(e){color=e.target.value};
+  document.getElementById('dim').oninput=function(e){dim=parseFloat(e.target.value)};
+
+  function pickMime(){
+    var t=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+    for(var i=0;i<t.length;i++){if(window.MediaRecorder&&MediaRecorder.isTypeSupported(t[i]))return t[i]}
+    return '';
+  }
+
+  function stopRec(){if(recorder&&recorder.state!=='inactive')recorder.stop()}
+
+  recBtn.onclick=function(){
+    if(recorder&&recorder.state==='recording'){stopRec();player.pause();return}
+    if(!window.MediaRecorder){say('Recording is not supported in this browser.');return}
+    initAudio();if(AC.state==='suspended')AC.resume();
+    var mime=pickMime(),vs=cv.captureStream(30),
+        stream=new MediaStream(vs.getVideoTracks().concat(recDest.stream.getAudioTracks()));
+    chunks=[];
+    try{recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined)}catch(err){say('Could not start recording.');return}
+    recorder.ondataavailable=function(e){if(e.data.size)chunks.push(e.data)};
+    recorder.onstop=function(){
+      var type=recorder.mimeType||'video/webm',ext=type.indexOf('mp4')>-1?'mp4':'webm';
+      var blob=new Blob(chunks,{type:type});
+      if(vidUrl)URL.revokeObjectURL(vidUrl);
+      vidUrl=URL.createObjectURL(blob);
+      dlVid.href=vidUrl;dlVid.download=(title||'song-wave')+'.'+ext;
+      dlVid.textContent='Download video (.'+ext+')';dlVid.hidden=false;
+      recBtn.setAttribute('aria-pressed','false');recBtn.textContent='Record video';
+      player.removeEventListener('ended',stopRec);
+      say('Video ready. Tap the download button.');
+    };
+    player.addEventListener('ended',stopRec);
+    dlVid.hidden=true;
+    player.currentTime=0;
+    recorder.start(500);
+    player.play();
+    recBtn.setAttribute('aria-pressed','true');recBtn.textContent='Stop recording';
+    say('Recording until the song ends.');
+  };
+
+  function cover(im,s){
+    var r=Math.max(W/im.width,H/im.height)*s,w=im.width*r,h=im.height*r;
+    ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
+  }
+
+  function draw(){
+    requestAnimationFrame(draw);
+    ctx.fillStyle='#05070f';ctx.fillRect(0,0,W,H);
+    var playing=an&&!player.paused;
+    if(playing){
+      an.getByteTimeDomainData(tdata);an.getByteFrequencyData(fdata);
+      var s=0;for(var i=0;i<10;i++)s+=fdata[i];bass=bass*0.8+(s/10/255)*0.2;
+    }else bass*=0.9;
+
+    if(img)cover(img,1+bass*0.06);
+    else{var g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#101a3a');g.addColorStop(1,'#2a0f33');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+    ctx.fillStyle='rgba(0,0,0,'+dim+')';ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle=color;ctx.strokeStyle=color;ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.shadowColor=color;ctx.shadowBlur=14;
+
+    if(mode==='bars'){
+      var n=72,bw=W/n,use=Math.floor(fdata?fdata.length*0.55/n:1);
+      for(var i=0;i<n;i++){
+        var v=0;if(playing){for(var j=0;j<use;j++)v+=fdata[i*use+j];v/=use*255}
+        var bh=Math.max(4,v*H*0.55);
+        ctx.fillRect(i*bw+bw*0.2,H-60-bh,bw*0.6,bh);
+      }
+    }else if(mode==='wave'){
+      ctx.beginPath();
+      var N=tdata?tdata.length:2,st=W/N;
+      for(var i=0;i<N;i++){var y=playing?H*0.5+(tdata[i]-128)/128*H*0.3:H*0.5;i?ctx.lineTo(i*st,y):ctx.moveTo(0,y)}
+      ctx.stroke();
+    }else{
+      var cx=W/2,cy=H/2,r0=H*0.2,P=200;
+      ctx.beginPath();
+      for(var i=0;i<=P;i++){
+        var k=i%P,v=playing?(tdata[Math.floor(k/P*tdata.length)]-128)/128:0;
+        var a=k/P*Math.PI*2,r=r0*(1+bass*0.6)+v*r0*0.8;
+        var x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.closePath();ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+
+    if(title){
+      ctx.fillStyle='#fff';ctx.font='600 30px system-ui,sans-serif';ctx.textAlign='center';
+      ctx.fillText(title.length>50?title.slice(0,47)+'...':title,W/2,H-22);
+    }
+  }
+  draw();
+})();
+</script>
+</body>
+</html>
