@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Song Wave</title>
+<title>Sad Ringtone Status Maker</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
---bg:#05070d;--panel:#0d111d;--line:#1a233a;--text:#dce6ff;--muted:#7c8bb5;--a:#30eeff}
+--bg:#070b16;--panel:#0e1426;--line:#1f2a48;--text:#dce6ff;--muted:#7c8bb5;--a:#34e0ff}
 *,*:before,*:after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:960px;margin:0 auto;padding:14px;display:grid;gap:12px}
+main{max-width:500px;margin:0 auto;padding:14px;display:grid;gap:12px}
 h1{font-size:21px;margin:4px 0 0}
 p{margin:0;color:var(--muted)}
-canvas{display:block;width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);border-radius:12px}
+canvas{display:block;width:100%;aspect-ratio:9/16;background:#000;border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.5)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 button,label.btn{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer;min-height:44px}
 button:hover,label.btn:hover{border-color:var(--a)}
@@ -20,9 +20,10 @@ button:focus-visible,label.btn:focus-within,input:focus-visible{outline:2px soli
 button[aria-pressed="true"]{border-color:var(--a);color:var(--a)}
 button:disabled{opacity:.4;cursor:not-allowed}
 .rec[aria-pressed="true"]{border-color:#ff4f6a;color:#ff4f6a}
-.ctl{display:flex;align-items:center;gap:8px;color:var(--muted)}
-input[type=color]{width:44px;height:36px;border:1px solid var(--line);background:none;border-radius:6px;padding:2px}
-input[type=range]{accent-color:var(--a)}
+.ctl{display:flex;align-items:center;gap:8px;color:var(--muted);width:100%}
+input[type=text]{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 12px;font:inherit;flex:1}
+input[type=color]{width:44px;height:36px;border:1px solid var(--line);background:none;border-radius:6px;padding:2px;cursor:pointer}
+input[type=range]{accent-color:var(--a);flex:1}
 audio{width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 #msg{min-height:1.4em}
@@ -31,31 +32,30 @@ audio{width:100%}
 <body>
 <main>
   <div>
-    <h1>Song Wave</h1>
-    <p>Add a photo and a song, watch the wave, then download the song or a video.</p>
+    <h1>Sad Call Status Generator</h1>
+    <p>Upload a photo and ringtone to create a video status with phone call controls.</p>
   </div>
 
-  <canvas id="c" width="1280" height="720" aria-label="Song visualization"></canvas>
+  <!-- 9:16 Vertical Video Screen Canvas -->
+  <canvas id="c" width="1080" height="1920" aria-label="Ringtone status visualization"></canvas>
 
   <div class="row">
-    <label class="btn">Add photo<input class="sr" id="photo" type="file" accept="image/*"></label>
-    <label class="btn">Add song<input class="sr" id="song" type="file" accept="audio/*"></label>
+    <label class="btn">Add Photo<input class="sr" id="photo" type="file" accept="image/*"></label>
+    <label class="btn">Add Song / Ringtone<input class="sr" id="song" type="file" accept="audio/*"></label>
   </div>
 
   <audio id="player" controls></audio>
 
-  <div class="row" id="modes" role="group" aria-label="Style">
-    <button data-m="wave" aria-pressed="true">Center Wave</button>
-    <button data-m="bars" aria-pressed="false">Center Bars</button>
-    <button data-m="ring" aria-pressed="false">Center Ring</button>
-    <label class="ctl">Center Glow <input type="color" id="col" value="#30eeff"></label>
-    <label class="ctl">Glow Intensity <input type="range" id="glow" min="5" max="50" value="30"></label>
-    <label class="ctl">Dim photo <input type="range" id="dim" min="0" max="0.8" step="0.05" value="0.25"></label>
+  <div class="row">
+    <label class="ctl">Status Title: <input type="text" id="statusTitle" value="Broken"></label>
+    <label class="ctl">Wave Color: <input type="color" id="waveCol" value="#ffffff"></label>
+    <label class="ctl">Top Blur <input type="range" id="topBlur" min="0" max="30" value="15"></label>
+    <label class="ctl">Dim Overlay <input type="range" id="dim" min="0" max="0.7" step="0.05" value="0.25"></label>
   </div>
 
   <div class="row">
-    <button id="dlSong" disabled>Download song</button>
-    <button id="rec" class="rec" aria-pressed="false" disabled>Record video</button>
+    <button id="dlSong" disabled>Download Audio</button>
+    <button id="rec" class="rec" aria-pressed="false" disabled>Record Video (9:16)</button>
     <a id="dlVid" class="btn" hidden></a>
   </div>
   <p id="msg" role="status"></p>
@@ -66,9 +66,21 @@ audio{width:100%}
   var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
   var player=document.getElementById('player'),msg=document.getElementById('msg');
   var dlSong=document.getElementById('dlSong'),recBtn=document.getElementById('rec'),dlVid=document.getElementById('dlVid');
-  var AC,an,msrc,recDest,tdata,fdata,img=null,songFile=null,songUrl=null,title='',mode='wave';
-  var color='#30eeff',glowBlur=30,dim=0.25;
+  var AC,an,msrc,recDest,tdata,fdata,img=null,songFile=null,songUrl=null,title='Broken';
+  var waveColor='#ffffff',topBlurVal=15,dimVal=0.25;
   var recorder=null,chunks=[],vidUrl=null,bass=0;
+
+  // Dust Bokeh Particle System
+  var particles=[];
+  for(var p=0;p<45;p++){
+    particles.push({
+      x:Math.random()*W,
+      y:Math.random()*H,
+      r:Math.random()*5+2,
+      vy:-Math.random()*1.5-0.5,
+      alpha:Math.random()*0.6+0.2
+    });
+  }
 
   function say(t){msg.textContent=t}
 
@@ -86,7 +98,7 @@ audio{width:100%}
   document.getElementById('photo').onchange=function(e){
     var f=e.target.files[0];if(!f)return;
     var im=new Image();
-    im.onload=function(){img=im;say('Photo added.')};
+    im.onload=function(){img=im;say('Photo loaded successfully.')};
     im.src=URL.createObjectURL(f);
   };
 
@@ -94,25 +106,21 @@ audio{width:100%}
     var f=e.target.files[0];if(!f)return;
     if(songUrl)URL.revokeObjectURL(songUrl);
     songFile=f;songUrl=URL.createObjectURL(f);
-    title=f.name.replace(/\.[^.]+$/,'');
     player.src=songUrl;
     dlSong.disabled=false;recBtn.disabled=false;
-    say('Song added. Press play, or record a video.');
+    say('Song added. Tap play or record video.');
   };
+
+  document.getElementById('statusTitle').oninput=function(e){title=e.target.value};
+  document.getElementById('waveCol').oninput=function(e){waveColor=e.target.value};
+  document.getElementById('topBlur').oninput=function(e){topBlurVal=parseFloat(e.target.value)};
+  document.getElementById('dim').oninput=function(e){dimVal=parseFloat(e.target.value)};
 
   dlSong.onclick=function(){
     if(!songFile)return;
     var a=document.createElement('a');a.href=songUrl;a.download=songFile.name;
     document.body.appendChild(a);a.click();a.remove();
   };
-
-  document.getElementById('modes').onclick=function(e){
-    var b=e.target.closest('button');if(!b)return;mode=b.dataset.m;
-    [].forEach.call(this.querySelectorAll('button'),function(x){x.setAttribute('aria-pressed',x===b)});
-  };
-  document.getElementById('col').oninput=function(e){color=e.target.value};
-  document.getElementById('glow').oninput=function(e){glowBlur=parseFloat(e.target.value)};
-  document.getElementById('dim').oninput=function(e){dim=parseFloat(e.target.value)};
 
   function pickMime(){
     var t=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
@@ -124,7 +132,7 @@ audio{width:100%}
 
   recBtn.onclick=function(){
     if(recorder&&recorder.state==='recording'){stopRec();player.pause();return}
-    if(!window.MediaRecorder){say('Recording is not supported in this browser.');return}
+    if(!window.MediaRecorder){say('Video recording is not supported in this browser.');return}
     initAudio();if(AC.state==='suspended')AC.resume();
     var mime=pickMime(),vs=cv.captureStream(30),
         stream=new MediaStream(vs.getVideoTracks().concat(recDest.stream.getAudioTracks()));
@@ -136,11 +144,11 @@ audio{width:100%}
       var blob=new Blob(chunks,{type:type});
       if(vidUrl)URL.revokeObjectURL(vidUrl);
       vidUrl=URL.createObjectURL(blob);
-      dlVid.href=vidUrl;dlVid.download=(title||'song-wave')+'.'+ext;
-      dlVid.textContent='Download video (.'+ext+')';dlVid.hidden=false;
-      recBtn.setAttribute('aria-pressed','false');recBtn.textContent='Record video';
+      dlVid.href=vidUrl;dlVid.download=(title||'status-video')+'.'+ext;
+      dlVid.textContent='Download status video (.'+ext+')';dlVid.hidden=false;
+      recBtn.setAttribute('aria-pressed','false');recBtn.textContent='Record Video (9:16)';
       player.removeEventListener('ended',stopRec);
-      say('Video ready. Tap the download button.');
+      say('Video ready! Click download below.');
     };
     player.addEventListener('ended',stopRec);
     dlVid.hidden=true;
@@ -148,112 +156,139 @@ audio{width:100%}
     recorder.start(500);
     player.play();
     recBtn.setAttribute('aria-pressed','true');recBtn.textContent='Stop recording';
-    say('Recording until the song ends.');
+    say('Recording 9:16 vertical video...');
   };
 
-  function cover(im,s){
-    var r=Math.max(W/im.width,H/im.height)*s,w=im.width*r,h=im.height*r;
-    ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
+  function drawCover(im, x, y, w, h, zoom){
+    var r = Math.max(w / im.width, h / im.height) * zoom;
+    var nw = im.width * r, nh = im.height * r;
+    ctx.drawImage(im, x + (w - nw) / 2, y + (h - nh) / 2, nw, nh);
+  }
+
+  function drawPhoneIcon(x, y, radius, color, isDecline){
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.translate(x, y);
+    if(isDecline) ctx.rotate(Math.PI * 0.75);
+    else ctx.rotate(Math.PI * 0.1);
+
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.rect(-radius*0.25, -radius*0.1, radius*0.5, radius*0.2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function renderParticles(){
+    ctx.fillStyle = '#ffffff';
+    for(var i=0; i<particles.length; i++){
+      var pt = particles[i];
+      pt.y += pt.vy * (1 + bass * 1.5);
+      if(pt.y < 0) pt.y = H;
+      ctx.globalAlpha = pt.alpha * (0.3 + bass * 0.7);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.r * (1 + bass * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
   }
 
   function draw(){
     requestAnimationFrame(draw);
-    ctx.fillStyle='#05070d';ctx.fillRect(0,0,W,H);
 
-    var playing=an&&!player.paused;
+    var playing = an && !player.paused;
     if(playing){
       an.getByteTimeDomainData(tdata);an.getByteFrequencyData(fdata);
-      var s=0;for(var i=0;i<10;i++)s+=fdata[i];bass=bass*0.8+(s/10/255)*0.2;
-    }else bass*=0.9;
+      var s = 0; for(var i=0; i<10; i++) s += fdata[i];
+      bass = bass * 0.8 + (s / 10 / 255) * 0.2;
+    }else bass *= 0.9;
 
-    // Background Image
-    if(img) cover(img, 1 + bass * 0.03);
-    else{
-      var g=ctx.createLinearGradient(0,0,W,H);
-      g.addColorStop(0,'#0a1128');g.addColorStop(1,'#000000');
-      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    // Background Render
+    if(img){
+      ctx.save();
+      ctx.filter = 'blur(' + topBlurVal + 'px)';
+      drawCover(img, 0, 0, W, H * 0.55, 1.1 + bass * 0.03);
+      ctx.restore();
+
+      drawCover(img, 0, H * 0.45, W, H * 0.55, 1.0 + bass * 0.02);
+    } else {
+      var bgG = ctx.createLinearGradient(0, 0, 0, H);
+      bgG.addColorStop(0, '#2c3e50'); bgG.addColorStop(1, '#000000');
+      ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
     }
 
-    // Photo Dim Overlay
-    ctx.fillStyle='rgba(0,0,0,'+dim+')';ctx.fillRect(0,0,W,H);
-
-    // --- Vibrant Center Glow ---
-    var glowRadius = (H * 0.25) + (bass * H * 0.35);
-    var centerGlow = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, glowRadius);
-    centerGlow.addColorStop(0, color);
-    centerGlow.addColorStop(0.4, color);
-    centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-    
-    ctx.save();
-    ctx.globalAlpha = 0.35 + bass * 0.45;
-    ctx.fillStyle = centerGlow;
+    ctx.fillStyle = 'rgba(0,0,0,' + dimVal + ')';
     ctx.fillRect(0, 0, W, H);
-    ctx.restore();
 
-    // Canvas line and glow settings
-    ctx.fillStyle=color;ctx.strokeStyle=color;ctx.lineWidth=5;ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.shadowColor=color;ctx.shadowBlur=glowBlur;
+    renderParticles();
 
-    if(mode==='wave'){
-      // Wave is small on edges, high in the middle (Bell Curve Envelope)
+    // Top "Broken 💔" Title Overlay
+    var titleY = H * 0.22;
+    ctx.textAlign = 'center';
+    ctx.font = '900 110px system-ui,-apple-system,sans-serif';
+    
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = '#ffffff';
+    
+    var txt = title || 'Broken';
+    ctx.fillText(txt, W / 2 - 40, titleY);
+    ctx.shadowBlur = 0;
+
+    ctx.font = '100px system-ui';
+    ctx.fillText('', W / 2 + (ctx.measureText(txt).width / 2) + 10, titleY - 5);
+
+    // --- Dynamic Color Center Audio Bars ---
+    var visY = H * 0.64;
+    var barCount = 5;
+    var barWidth = 24;
+    var barGap = 20;
+    var totalW = barCount * (barWidth + barGap) - barGap;
+    var startX = (W - totalW) / 2;
+
+    for(var i = 0; i < barCount; i++){
+      var val = 0;
+      if(playing && fdata) val = fdata[i * 4] / 255;
+      var h = Math.max(24, val * 120 + (i === 2 ? 20 : 0));
+      
       ctx.beginPath();
-      var N=tdata?tdata.length:2,st=W/N;
-      var prevX=0,prevY=H*0.5;
-      ctx.moveTo(prevX,prevY);
-
-      for(var i=0;i<N;i+=4){
-        // Parabolic multiplier: 0 at left/right edges, 1 in center
-        var progress = i / N;
-        var envelope = Math.sin(progress * Math.PI); // Envelope curve (0 -> 1 -> 0)
-        
-        var rawVal = playing ? (tdata[i] - 128) / 128 : 0;
-        var y = H * 0.5 + (rawVal * H * 0.38 * envelope);
-        var x = i * st;
-
-        var xc = (x + prevX) / 2, yc = (y + prevY) / 2;
-        ctx.quadraticCurveTo(prevX, prevY, xc, yc);
-        prevX = x; prevY = y;
-      }
-      ctx.stroke();
-
-    }else if(mode==='bars'){
-      // Bars are small on sides, tall in middle
-      var n=64, bw=W/n, use=Math.floor(fdata?fdata.length*0.55/n:1);
-      for(var i=0;i<n;i++){
-        var v=0;if(playing){for(var j=0;j<use;j++)v+=fdata[i*use+j];v/=use*255}
-        
-        var progress = i / n;
-        var envelope = Math.sin(progress * Math.PI); // Taper edges
-        var bh = Math.max(4, v * H * 0.6 * envelope);
-
-        ctx.fillRect(i*bw + bw*0.2, H*0.5 - bh/2, bw*0.6, bh);
-      }
-    }else{
-      // Pulse Ring in middle
-      var cx=W/2,cy=H/2,r0=H*0.2,P=180;
-      ctx.beginPath();
-      for(var i=0;i<=P;i++){
-        var k=i%P,v=playing?(tdata[Math.floor(k/P*tdata.length)]-128)/128:0;
-        var a=k/P*Math.PI*2,r=r0*(1+bass*0.6)+v*r0*0.6;
-        var x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
-        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
-      }
-      ctx.closePath();
-      ctx.stroke();
+      ctx.roundRect(startX + i * (barWidth + barGap), visY - h / 2, barWidth, h, 12);
+      ctx.fillStyle = waveColor;
+      ctx.shadowColor = waveColor;
+      ctx.shadowBlur = 20;
+      ctx.fill();
     }
-    ctx.shadowBlur=0;
+    ctx.shadowBlur = 0;
 
-    // Title Overlay
-    if(title){
-      ctx.fillStyle='#ffffff';
-      ctx.font='700 32px system-ui,-apple-system,sans-serif';
-      ctx.textAlign='center';
-      ctx.shadowColor='rgba(0,0,0,0.8)';
-      ctx.shadowBlur=8;
-      ctx.fillText(title.length>50?title.slice(0,47)+'...':title,W/2,H-40);
-      ctx.shadowBlur=0;
-    }
+    // Call Interface (Decline & Accept Buttons)
+    var callY = H * 0.74;
+    var btnRadius = 80 + (bass * 6);
+
+    drawPhoneIcon(W * 0.3, callY, btnRadius, '#ff3b30', true);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 38px system-ui';
+    ctx.fillText('Decline', W * 0.3, callY + btnRadius + 50);
+
+    drawPhoneIcon(W * 0.7, callY, btnRadius, '#34c759', false);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 38px system-ui';
+    ctx.fillText('Accept', W * 0.7, callY + btnRadius + 50);
+
+    ctx.font = '400 30px system-ui';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText('📷  @Dintone', W / 2, H * 0.06);
   }
+
   draw();
 })();
 </script>
