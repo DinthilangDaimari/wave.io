@@ -48,7 +48,9 @@ audio{width:100%}
     <button data-m="bars" aria-pressed="true">Bars</button>
     <button data-m="wave" aria-pressed="false">Wave</button>
     <button data-m="ring" aria-pressed="false">Ring</button>
-    <label class="ctl">Color <input type="color" id="col" value="#34e0ff"></label>
+    <label class="ctl">Color 1 <input type="color" id="col1" value="#34e0ff"></label>
+    <label class="ctl">Color 2 <input type="color" id="col2" value="#ff34b3"></label>
+    <label class="ctl">Glow <input type="range" id="glow" min="4" max="30" value="16"></label>
     <label class="ctl">Dim photo <input type="range" id="dim" min="0" max="0.8" step="0.05" value="0.35"></label>
   </div>
 
@@ -65,8 +67,22 @@ audio{width:100%}
   var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
   var player=document.getElementById('player'),msg=document.getElementById('msg');
   var dlSong=document.getElementById('dlSong'),recBtn=document.getElementById('rec'),dlVid=document.getElementById('dlVid');
-  var AC,an,msrc,recDest,tdata,fdata,img=null,songFile=null,songUrl=null,title='',mode='bars',color='#34e0ff',dim=0.35;
-  var recorder=null,chunks=[],vidUrl=null,bass=0;
+  var AC,an,msrc,recDest,tdata,fdata,img=null,songFile=null,songUrl=null,title='',mode='bars';
+  var color1='#34e0ff',color2='#ff34b3',glowBlur=16,dim=0.35;
+  var recorder=null,chunks=[],vidUrl=null,bass=0,treble=0;
+
+  // Particle System Setup
+  var particles=[];
+  for(var p=0;p<60;p++){
+    particles.push({
+      x:Math.random()*W,
+      y:Math.random()*H,
+      r:Math.random()*2.5+1,
+      vx:(Math.random()-0.5)*0.8,
+      vy:-Math.random()*1.2-0.3,
+      alpha:Math.random()*0.7+0.3
+    });
+  }
 
   function say(t){msg.textContent=t}
 
@@ -108,7 +124,9 @@ audio{width:100%}
     var b=e.target.closest('button');if(!b)return;mode=b.dataset.m;
     [].forEach.call(this.querySelectorAll('button'),function(x){x.setAttribute('aria-pressed',x===b)});
   };
-  document.getElementById('col').oninput=function(e){color=e.target.value};
+  document.getElementById('col1').oninput=function(e){color1=e.target.value};
+  document.getElementById('col2').oninput=function(e){color2=e.target.value};
+  document.getElementById('glow').oninput=function(e){glowBlur=parseFloat(e.target.value)};
   document.getElementById('dim').oninput=function(e){dim=parseFloat(e.target.value)};
 
   function pickMime(){
@@ -153,41 +171,102 @@ audio{width:100%}
     ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);
   }
 
+  function renderParticles(){
+    ctx.shadowBlur=0;
+    ctx.fillStyle=color1;
+    for(var i=0;i<particles.length;i++){
+      var pt=particles[i];
+      pt.x+=pt.vx*(1+bass*2);
+      pt.y+=pt.vy*(1+bass*2);
+      if(pt.x<0)pt.x=W;if(pt.x>W)pt.x=0;
+      if(pt.y<0)pt.y=H;
+      ctx.globalAlpha=pt.alpha*(0.4+bass*0.6);
+      ctx.beginPath();
+      ctx.arc(pt.x,pt.y,pt.r*(1+bass*0.8),0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
   function draw(){
     requestAnimationFrame(draw);
     ctx.fillStyle='#05070f';ctx.fillRect(0,0,W,H);
     var playing=an&&!player.paused;
     if(playing){
       an.getByteTimeDomainData(tdata);an.getByteFrequencyData(fdata);
-      var s=0;for(var i=0;i<10;i++)s+=fdata[i];bass=bass*0.8+(s/10/255)*0.2;
-    }else bass*=0.9;
+      var s=0,t=0;
+      for(var i=0;i<10;i++)s+=fdata[i];
+      for(var i=200;i<300;i++)t+=fdata[i];
+      bass=bass*0.8+(s/10/255)*0.2;
+      treble=treble*0.8+(t/100/255)*0.2;
+    }else{
+      bass*=0.9;treble*=0.9;
+    }
 
     if(img)cover(img,1+bass*0.06);
-    else{var g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#101a3a');g.addColorStop(1,'#2a0f33');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+    else{
+      var g=ctx.createLinearGradient(0,0,W,H);
+      g.addColorStop(0,'#101a3a');g.addColorStop(1,'#2a0f33');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    }
     ctx.fillStyle='rgba(0,0,0,'+dim+')';ctx.fillRect(0,0,W,H);
 
-    ctx.fillStyle=color;ctx.strokeStyle=color;ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.shadowColor=color;ctx.shadowBlur=14;
+    renderParticles();
+
+    ctx.shadowBlur=glowBlur;
+    ctx.lineCap='round';ctx.lineJoin='round';
 
     if(mode==='bars'){
       var n=72,bw=W/n,use=Math.floor(fdata?fdata.length*0.55/n:1);
       for(var i=0;i<n;i++){
         var v=0;if(playing){for(var j=0;j<use;j++)v+=fdata[i*use+j];v/=use*255}
         var bh=Math.max(4,v*H*0.55);
+        
+        var barGrad=ctx.createLinearGradient(0,H-60,0,H-60-bh);
+        barGrad.addColorStop(0,color1);
+        barGrad.addColorStop(1,color2);
+        ctx.fillStyle=barGrad;
+        ctx.shadowColor=color2;
+
         ctx.fillRect(i*bw+bw*0.2,H-60-bh,bw*0.6,bh);
       }
     }else if(mode==='wave'){
+      var waveGrad=ctx.createLinearGradient(0,0,W,0);
+      waveGrad.addColorStop(0,color1);
+      waveGrad.addColorStop(0.5,color2);
+      waveGrad.addColorStop(1,color1);
+      ctx.strokeStyle=waveGrad;
+      ctx.shadowColor=color2;
+      ctx.lineWidth=5;
+
       ctx.beginPath();
       var N=tdata?tdata.length:2,st=W/N;
-      for(var i=0;i<N;i++){var y=playing?H*0.5+(tdata[i]-128)/128*H*0.3:H*0.5;i?ctx.lineTo(i*st,y):ctx.moveTo(0,y)}
+      var prevX=0,prevY=H*0.5;
+      ctx.moveTo(prevX,prevY);
+
+      for(var i=0;i<N;i+=4){
+        var y=playing?H*0.5+(tdata[i]-128)/128*H*0.35:H*0.5;
+        var x=i*st;
+        var xc=(x+prevX)/2,yc=(y+prevY)/2;
+        ctx.quadraticCurveTo(prevX,prevY,xc,yc);
+        prevX=x;prevY=y;
+      }
       ctx.stroke();
     }else{
       var cx=W/2,cy=H/2,r0=H*0.2,P=200;
+      var ringGrad=ctx.createRadialGradient(cx,cy,r0*0.5,cx,cy,r0*2);
+      ringGrad.addColorStop(0,color1);
+      ringGrad.addColorStop(1,color2);
+      ctx.strokeStyle=ringGrad;
+      ctx.shadowColor=color1;
+      ctx.lineWidth=4;
+
       ctx.beginPath();
       for(var i=0;i<=P;i++){
         var k=i%P,v=playing?(tdata[Math.floor(k/P*tdata.length)]-128)/128:0;
         var a=k/P*Math.PI*2,r=r0*(1+bass*0.6)+v*r0*0.8;
-        var x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        var x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
       }
       ctx.closePath();ctx.stroke();
     }
