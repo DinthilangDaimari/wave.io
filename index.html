@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Status Video Creator Studio - Pro Edition</title>
+<title>Status Video Creator Studio - Fixed Edition</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 --bg:#070b16;--panel:#0e1426;--line:#1f2a48;--text:#dce6ff;--muted:#7c8bb5;--a:#34e0ff}
@@ -31,6 +31,8 @@ audio{width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 #msg{min-height:1.4em;color:var(--a)}
 </style>
+<!-- Fix WebM/MP4 Duration Header Bug -->
+<script src="https://cdn.jsdelivr.net/npm/ts-ebml@2.0.2/dist/EBML.min.js"></script>
 </head>
 <body>
 <main>
@@ -125,7 +127,7 @@ audio{width:100%}
   var title='Broken', titleColor='#ffffff', emoji='💔', fontStyle='system-ui', handle='📷  @RINGTONEEFFECT';
   var waveColor='#ffffff', glowBlur=20, waveMode='dots';
   var particleType='bokeh', currentFilter='none', topBlurVal=15, dimVal=0.25, showCall=true;
-  var recorder=null,chunks=[],vidUrl=null,bass=0;
+  var recorder=null,chunks=[],vidUrl=null,bass=0,startTime=0;
 
   var blurCanvas = document.createElement('canvas');
   var blurCtx = blurCanvas.getContext('2d');
@@ -210,22 +212,27 @@ audio{width:100%}
     document.body.appendChild(a);a.click();a.remove();
   };
 
-  function pickMime(){
-    var t=[
-      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-      'video/mp4',
-      'video/webm;codecs=vp8,opus',
-      'video/webm'
-    ];
-    for(var i=0;i<t.length;i++){
-      if(window.MediaRecorder && MediaRecorder.isTypeSupported(t[i])) return t[i];
-    }
-    return '';
-  }
-
   function stopRec(){
     if(recorder && recorder.state !== 'inactive') {
       recorder.stop();
+    }
+  }
+
+  // Inject duration headers so external media players (Gallery/WhatsApp) don't cut off at 4s
+  async function injectMetadata(blob, durationMs) {
+    if (typeof EBML === 'undefined') return blob;
+    try {
+      var decoder = new EBML.Decoder();
+      var reader = new EBML.Reader();
+      var buffer = await blob.arrayBuffer();
+      var elms = decoder.decode(buffer);
+      elms.forEach(function(elm) { reader.read(elm); });
+      reader.stop();
+      var refinedBuffer = EBML.tools.makeMetadataSeekable(reader.metadatas, durationMs, reader.cues);
+      var body = buffer.slice(reader.metadataSize);
+      return new Blob([refinedBuffer, body], { type: blob.type });
+    } catch(e) {
+      return blob;
     }
   }
 
@@ -237,19 +244,15 @@ audio{width:100%}
     }
     
     if(!window.MediaRecorder){
-      say('Video recording is not supported in this browser.');
+      say('Video recording is not supported.');
       return;
     }
     
     initAudio();
     if(AC.state==='suspended') AC.resume();
     
-    var selectedMime = pickMime();
-    
-    // Explicit 30 FPS stream setup
     var vs = cv.captureStream(30);
     var audioTrack = recDest.stream.getAudioTracks()[0];
-    
     var combinedTracks = vs.getVideoTracks();
     if(audioTrack) combinedTracks.push(audioTrack);
     
@@ -258,12 +261,11 @@ audio{width:100%}
 
     try {
       recorder = new MediaRecorder(stream, {
-        mimeType: selectedMime || undefined,
-        videoBitsPerSecond: 2500000 // Stable bitrate to prevent memory caps
+        mimeType: 'video/webm;codecs=vp8,opus',
+        videoBitsPerSecond: 2500000
       });
     } catch(err) {
-      say('Failed to start recorder.');
-      return;
+      recorder = new MediaRecorder(stream);
     }
 
     recorder.ondataavailable = function(e){
@@ -272,36 +274,39 @@ audio{width:100%}
       }
     };
 
-    recorder.onstop = function(){
-      var actualType = recorder.mimeType || 'video/mp4';
-      var ext = actualType.includes('mp4') ? 'mp4' : 'webm';
-      var blob = new Blob(chunks, { type: actualType });
+    recorder.onstop = async function(){
+      say('Finalizing video metadata for WhatsApp/Gallery...');
+      var durationMs = Date.now() - startTime;
+      var rawBlob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+      
+      // Inject missing duration header into file
+      var fixedBlob = await injectMetadata(rawBlob, durationMs);
       
       if(vidUrl) URL.revokeObjectURL(vidUrl);
-      vidUrl = URL.createObjectURL(blob);
+      vidUrl = URL.createObjectURL(fixedBlob);
       
       dlVid.href = vidUrl;
-      dlVid.download = (title.trim() || 'status-video') + '.' + ext;
-      dlVid.textContent = 'Download Full Video (.' + ext.toUpperCase() + ')';
+      dlVid.download = (title.trim() || 'status-video') + '.webm';
+      dlVid.textContent = 'Download Full Video (.WEBM)';
       dlVid.hidden = false;
       
       recBtn.setAttribute('aria-pressed','false');
       recBtn.textContent = 'Record Video (9:16)';
       player.removeEventListener('ended', stopRec);
-      say('Complete video generated!');
+      say('Complete video ready! Plays fully in Gallery & WhatsApp.');
     };
 
     player.addEventListener('ended', stopRec);
     dlVid.hidden = true;
     player.currentTime = 0;
     
-    // 1000ms timeslice ensures data streams continually to memory without stopping at 4s
-    recorder.start(1000); 
+    startTime = Date.now();
+    recorder.start(100); 
     player.play();
     
     recBtn.setAttribute('aria-pressed','true');
     recBtn.textContent = 'Stop Recording';
-    say('Recording full video... Please keep this tab active.');
+    say('Recording status video...');
   };
 
   function drawCover(im, x, y, w, h, zoom){
