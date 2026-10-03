@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b12"><link rel="manifest" href="manifest.json"><link rel="stylesheet" href="style.css">
+<title>Virtual Master Web</title></head>
+<body>
+<div id="app">
+<header><button id="back">‹</button><div><b>Virtual Master</b><small id="pageTitle">Android VM</small></div><button id="power">⏻</button></header>
+<div id="screen">
+<section id="boot" class="view"><div class="logo">VM</div><h1>Virtual Master</h1><p>Starting virtual Android...</p><div class="loader"></div></section>
+<section id="home" class="view hidden">
+<div class="status"><span>9:41</span><span>▮▮▮  Wi-Fi 🔋</span></div>
+<div class="phone-space"><h2 id="profileName">Virtual Android</h2><p>Android 13 • 4 GB RAM • 32 GB</p></div>
+<div class="apps">
+<button data-page="browser">🌐<span>Browser</span></button><button data-page="files">📁<span>Files</span></button>
+<button data-page="settings">⚙️<span>Settings</span></button><button data-page="store">🛍️<span>App Store</span></button>
+<button data-page="terminal">⌨️<span>Terminal</span></button><button data-page="about">🤖<span>System</span></button>
+</div></section>
+<section id="browser" class="view hidden"><h2>Browser</h2><input id="url" placeholder="Enter a URL"><button id="browse">Open</button><div id="webbox">Safe browser area</div></section>
+<section id="files" class="view hidden"><h2>File Manager</h2><div class="list"><div>📁 Android</div><div>📁 Documents</div><div>📁 Downloads</div><div>📁 Pictures</div><div>📄 README.txt</div></div></section>
+<section id="settings" class="view hidden"><h2>Settings</h2>
+<label>Device name<input id="deviceName" value="Virtual Android"></label>
+<label>RAM<select><option>2 GB</option><option selected>4 GB</option><option>8 GB</option></select></label>
+<label>Storage<select><option>16 GB</option><option selected>32 GB</option><option>64 GB</option></select></label>
+<button id="save">Save settings</button></section>
+<section id="store" class="view hidden"><h2>App Store</h2><div class="card">🌐 Browser <button>Installed</button></div><div class="card">📁 File Manager <button>Installed</button></div><div class="card">⌨️ Terminal <button>Installed</button></div></section>
+<section id="terminal" class="view hidden"><h2>Terminal</h2><div class="terminal" id="term">Virtual Master shell<br>Type <b>help</b></div><input id="cmd" placeholder="command"><button id="run">Run</button></section>
+<section id="about" class="view hidden"><h2>System Information</h2><div class="info">Virtual Master Web<br>Android-compatible UI emulator<br>Kernel: Browser Sandbox<br>Version: 1.0.0</div></section>
+</div>
+<footer><button id="homeBtn">⌂</button><button id="recent">▢</button><button id="vmPower">⏻</button></footer>
+</div><script src="app.js"></script></body></html>
