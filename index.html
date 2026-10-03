@@ -127,14 +127,13 @@ audio{width:100%}
   var particleType='bokeh', currentFilter='none', topBlurVal=15, dimVal=0.25, showCall=true;
   var recorder=null,chunks=[],vidUrl=null,bass=0;
 
-  // Offscreen pre-rendered blur canvas for performance optimization
   var blurCanvas = document.createElement('canvas');
   var blurCtx = blurCanvas.getContext('2d');
   blurCanvas.width = W / 4;
   blurCanvas.height = (H * 0.55) / 4;
 
   var particles=[];
-  for(var p=0;p<30;p++){
+  for(var p=0;p<25;p++){
     particles.push({
       x:Math.random()*W,
       y:Math.random()*H,
@@ -150,7 +149,6 @@ audio{width:100%}
     if(!img) return;
     blurCtx.clearRect(0,0,blurCanvas.width,blurCanvas.height);
     blurCtx.filter = (currentFilter !== 'none' ? currentFilter + ' ' : '') + 'blur(' + (topBlurVal/4) + 'px)';
-    
     var r = Math.max(blurCanvas.width / img.width, blurCanvas.height / img.height);
     var nw = img.width * r, nh = img.height * r;
     blurCtx.drawImage(img, (blurCanvas.width - nw) / 2, (blurCanvas.height - nh) / 2, nw, nh);
@@ -159,7 +157,7 @@ audio{width:100%}
   function initAudio(){
     if(AC)return;
     AC=new (window.AudioContext||window.webkitAudioContext)();
-    an=AC.createAnalyser();an.fftSize=1024;an.smoothingTimeConstant=0.8;
+    an=AC.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.8;
     msrc=AC.createMediaElementSource(player);
     recDest=AC.createMediaStreamDestination();
     msrc.connect(an);an.connect(AC.destination);an.connect(recDest);
@@ -173,7 +171,7 @@ audio{width:100%}
     im.onload=function(){
       img=im;
       updateBlurCanvas();
-      say('Photo loaded successfully.');
+      say('Photo loaded.');
     };
     im.src=URL.createObjectURL(f);
   };
@@ -184,7 +182,7 @@ audio{width:100%}
     songFile=f;songUrl=URL.createObjectURL(f);
     player.src=songUrl;
     dlSong.disabled=false;recBtn.disabled=false;
-    say('Song added. Tap play or record.');
+    say('Song loaded. Ready to record.');
   };
 
   document.getElementById('statusTitle').oninput=function(e){title=e.target.value};
@@ -212,14 +210,11 @@ audio{width:100%}
     document.body.appendChild(a);a.click();a.remove();
   };
 
-  // Modern browser compatibility prioritizing MP4 container/codecs
   function pickMime(){
     var t=[
       'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-      'video/mp4;codecs=h264,aac',
       'video/mp4',
-      'video/webm;codecs=h264,opus',
-      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
       'video/webm'
     ];
     for(var i=0;i<t.length;i++){
@@ -228,26 +223,56 @@ audio{width:100%}
     return '';
   }
 
-  function stopRec(){if(recorder&&recorder.state!=='inactive')recorder.stop()}
+  function stopRec(){
+    if(recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  }
 
   recBtn.onclick=function(){
-    if(recorder&&recorder.state==='recording'){stopRec();player.pause();return}
-    if(!window.MediaRecorder){say('Video recording is not supported on this browser.');return}
-    initAudio();if(AC.state==='suspended')AC.resume();
-    
-    var selectedMime=pickMime();
-    var vs=cv.captureStream(30);
-    var stream=new MediaStream(vs.getVideoTracks().concat(recDest.stream.getAudioTracks()));
-    
-    chunks=[];
-    try{
-      recorder=new MediaRecorder(stream, selectedMime ? { mimeType: selectedMime, videoBitsPerSecond: 4000000 } : undefined);
-    }catch(err){
-      say('Could not start recording with standard options.');return;
+    if(recorder && recorder.state === 'recording'){
+      stopRec();
+      player.pause();
+      return;
     }
     
-    recorder.ondataavailable=function(e){if(e.data.size>0)chunks.push(e.data)};
-    recorder.onstop=function(){
+    if(!window.MediaRecorder){
+      say('Video recording is not supported in this browser.');
+      return;
+    }
+    
+    initAudio();
+    if(AC.state==='suspended') AC.resume();
+    
+    var selectedMime = pickMime();
+    
+    // Explicit 30 FPS stream setup
+    var vs = cv.captureStream(30);
+    var audioTrack = recDest.stream.getAudioTracks()[0];
+    
+    var combinedTracks = vs.getVideoTracks();
+    if(audioTrack) combinedTracks.push(audioTrack);
+    
+    var stream = new MediaStream(combinedTracks);
+    chunks = [];
+
+    try {
+      recorder = new MediaRecorder(stream, {
+        mimeType: selectedMime || undefined,
+        videoBitsPerSecond: 2500000 // Stable bitrate to prevent memory caps
+      });
+    } catch(err) {
+      say('Failed to start recorder.');
+      return;
+    }
+
+    recorder.ondataavailable = function(e){
+      if(e.data && e.data.size > 0){
+        chunks.push(e.data);
+      }
+    };
+
+    recorder.onstop = function(){
       var actualType = recorder.mimeType || 'video/mp4';
       var ext = actualType.includes('mp4') ? 'mp4' : 'webm';
       var blob = new Blob(chunks, { type: actualType });
@@ -257,23 +282,26 @@ audio{width:100%}
       
       dlVid.href = vidUrl;
       dlVid.download = (title.trim() || 'status-video') + '.' + ext;
-      dlVid.textContent = 'Download Status Video (.' + ext.toUpperCase() + ')';
+      dlVid.textContent = 'Download Full Video (.' + ext.toUpperCase() + ')';
       dlVid.hidden = false;
       
       recBtn.setAttribute('aria-pressed','false');
       recBtn.textContent = 'Record Video (9:16)';
-      player.removeEventListener('ended',stopRec);
-      say('Video created! Tap download to save to your device.');
+      player.removeEventListener('ended', stopRec);
+      say('Complete video generated!');
     };
+
+    player.addEventListener('ended', stopRec);
+    dlVid.hidden = true;
+    player.currentTime = 0;
     
-    player.addEventListener('ended',stopRec);
-    dlVid.hidden=true;
-    player.currentTime=0;
-    recorder.start(200);
+    // 1000ms timeslice ensures data streams continually to memory without stopping at 4s
+    recorder.start(1000); 
     player.play();
+    
     recBtn.setAttribute('aria-pressed','true');
-    recBtn.textContent='Stop Recording';
-    say('Recording status video...');
+    recBtn.textContent = 'Stop Recording';
+    say('Recording full video... Please keep this tab active.');
   };
 
   function drawCover(im, x, y, w, h, zoom){
@@ -397,10 +425,7 @@ audio{width:100%}
     }else bass *= 0.9;
 
     if(img){
-      // Render optimized pre-blurred canvas on top half
       ctx.drawImage(blurCanvas, 0, 0, W, H * 0.55);
-
-      // Render sharp image on bottom half
       ctx.save();
       if(currentFilter !== 'none') ctx.filter = currentFilter;
       drawCover(img, 0, H * 0.45, W, H * 0.55, 1.0 + bass * 0.02);
